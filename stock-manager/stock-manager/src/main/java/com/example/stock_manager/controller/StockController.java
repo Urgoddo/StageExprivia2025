@@ -3,10 +3,7 @@ package com.example.stock_manager.controller;
 import com.example.stock_manager.dto.PortfolioSummary;
 import com.example.stock_manager.dto.StockRequest;
 import com.example.stock_manager.dto.TransactionRequest;
-import com.example.stock_manager.exception.DuplicateStockException;
-import com.example.stock_manager.exception.StockNotFoundException;
 import com.example.stock_manager.model.Stock;
-import com.example.stock_manager.repository.StockRepository;
 import com.example.stock_manager.service.PortfolioService;
 import com.example.stock_manager.service.StockTransactionService;
 import jakarta.validation.Valid;
@@ -22,90 +19,65 @@ import java.util.List;
 @RequiredArgsConstructor
 public class StockController {
 
-    private final StockRepository stockRepository;
     private final PortfolioService portfolioService;
     private final StockTransactionService transactionService;
 
+    // --- CRUD DELEGATED TO SERVICE ---
+
     @PostMapping
     public ResponseEntity<Stock> create(@Valid @RequestBody StockRequest request) {
-        String symbol = request.getSymbol().toUpperCase();
-        
-        if (stockRepository.existsById(symbol)) {
-            throw new DuplicateStockException(symbol);
-        }
-
-        Stock stock = Stock.builder()
-                .symbol(symbol)
-                .quantity(request.getQuantity())
-                .build();
-
-        Stock saved = stockRepository.save(stock);
-        return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+        Stock created = transactionService.createStock(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
     @GetMapping
     public ResponseEntity<List<Stock>> findAll() {
-        List<Stock> all = stockRepository.findAll();
-        return ResponseEntity.ok(all);
+        return ResponseEntity.ok(transactionService.getAllStocks());
     }
 
     @GetMapping("/{symbol}")
     public ResponseEntity<Stock> findBySymbol(@PathVariable String symbol) {
-        Stock stock = stockRepository.findById(symbol.toUpperCase())
-                .orElseThrow(() -> new StockNotFoundException(symbol));
-        return ResponseEntity.ok(stock);
+        return ResponseEntity.ok(transactionService.getStockBySymbol(symbol));
     }
 
     @PutMapping("/{symbol}")
     public ResponseEntity<Stock> update(@PathVariable String symbol, 
                                         @Valid @RequestBody StockRequest request) {
-        Stock existing = stockRepository.findById(symbol.toUpperCase())
-                .orElseThrow(() -> new StockNotFoundException(symbol));
-
-        existing.setQuantity(request.getQuantity());
-        Stock updated = stockRepository.save(existing);
+        Stock updated = transactionService.updateStock(symbol, request);
         return ResponseEntity.ok(updated);
     }
 
     @DeleteMapping("/{symbol}")
     public ResponseEntity<Void> delete(@PathVariable String symbol) {
-        if (!stockRepository.existsById(symbol.toUpperCase())) {
-            throw new StockNotFoundException(symbol);
-        }
-        stockRepository.deleteById(symbol.toUpperCase());
+        transactionService.deleteStock(symbol);
         return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/total-value")
     public ResponseEntity<Double> getTotalValue() {
-        List<Stock> stocks = stockRepository.findAll();
-        double total = portfolioService.getTotalValue(stocks);
-        return ResponseEntity.ok(total);
+        return ResponseEntity.ok(portfolioService.getTotalValue());
     }
 
     @GetMapping("/average-price")
     public ResponseEntity<Double> getAveragePricePerShare() {
-        List<Stock> stocks = stockRepository.findAll();
-        double avg = portfolioService.getAveragePricePerShare(stocks);
-        return ResponseEntity.ok(avg);
+        return ResponseEntity.ok(portfolioService.getAveragePricePerShare());
     }
 
     @GetMapping("/summary")
     public ResponseEntity<PortfolioSummary> getSummary() {
-        List<Stock> stocks = stockRepository.findAll();
-        PortfolioSummary summary = portfolioService.getPortfolioSummary(stocks);
-        return ResponseEntity.ok(summary);
+        return ResponseEntity.ok(portfolioService.getPortfolioSummary());
     }
 
     @GetMapping("/highest-value")
     public ResponseEntity<Stock> getHighestValueStock() {
-        List<Stock> stocks = stockRepository.findAll();
-        Stock highest = portfolioService.findHighestValueStock(stocks);
+        Stock highest = portfolioService.findHighestValueStock();
         if (highest == null) {
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.ok(highest);
     }
+
+    // --- TRANSACTIONS ---
 
     @PostMapping("/buy")
     public ResponseEntity<Stock> buyStock(@Valid @RequestBody TransactionRequest request) {
@@ -124,13 +96,11 @@ public class StockController {
 
     @GetMapping("/sorted-by-value")
     public ResponseEntity<List<Stock>> getStocksSortedByValue() {
-        List<Stock> stocks = transactionService.getStocksByValue();
-        return ResponseEntity.ok(stocks);
+        return ResponseEntity.ok(transactionService.getStocksByValue());
     }
 
     @GetMapping("/{symbol}/investment")
     public ResponseEntity<Double> getTotalInvestment(@PathVariable String symbol) {
-        double investment = transactionService.calculateTotalInvestment(symbol);
-        return ResponseEntity.ok(investment);
+        return ResponseEntity.ok(transactionService.calculateTotalInvestment(symbol));
     }
 }

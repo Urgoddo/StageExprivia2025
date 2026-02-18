@@ -5,16 +5,13 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-import java.util.List;
-
 @Getter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class PortfolioSummary {
+public class StockValueResponse {
+    private String symbol;
+    private int quantity;
+    private double currentPrice;
     private double totalValue;
-    private double averagePricePerShare;
-    private int totalStocks;
-    private int totalQuantity;
-    private List<StockValueResponse> stockDetails;
 }

@@ -1,6 +1,8 @@
 package com.example.stock_manager.service;
 
 import com.example.stock_manager.dto.PortfolioSummary;
+import com.example.stock_manager.dto.StockValueResponse;
+import com.example.stock_manager.mapper.StockMapper;
 import com.example.stock_manager.model.Stock;
 import com.example.stock_manager.repository.StockRepository;
 import lombok.RequiredArgsConstructor;
@@ -8,7 +10,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -19,32 +20,38 @@ public class PortfolioService {
     private final StockPriceService stockPriceService;
 
     public double getTotalValue() {
-        List<Stock> stocks = stockRepository.findAll();
-        if (stocks.isEmpty()) return 0.0;
-        
+        return getTotalValue(stockRepository.findAll());
+    }
+
+    public double getTotalValue(List<Stock> stocks) {
+        if (stocks == null || stocks.isEmpty()) return 0.0;
         return stocks.stream()
                 .mapToDouble(s -> stockPriceService.getPrice(s.getSymbol()) * s.getQuantity())
                 .sum();
     }
 
     public double getAveragePricePerShare() {
-        List<Stock> stocks = stockRepository.findAll();
-        if (stocks.isEmpty()) return 0.0;
+        return getAveragePricePerShare(stockRepository.findAll());
+    }
 
+    public double getAveragePricePerShare(List<Stock> stocks) {
+        if (stocks == null || stocks.isEmpty()) return 0.0;
         int totalQuantity = stocks.stream()
                 .mapToInt(Stock::getQuantity)
                 .sum();
 
         if (totalQuantity == 0) return 0.0;
 
-        double totalValue = getTotalValue(); // Riutilizza il metodo interno
+        double totalValue = getTotalValue(stocks);
         return totalValue / totalQuantity;
     }
 
     public PortfolioSummary getPortfolioSummary() {
-        List<Stock> stocks = stockRepository.findAll();
-        
-        if (stocks.isEmpty()) {
+        return getPortfolioSummary(stockRepository.findAll());
+    }
+
+    public PortfolioSummary getPortfolioSummary(List<Stock> stocks) {
+        if (stocks == null || stocks.isEmpty()) {
             return PortfolioSummary.builder()
                     .totalValue(0.0)
                     .averagePricePerShare(0.0)
@@ -54,25 +61,16 @@ public class PortfolioService {
                     .build();
         }
 
-        List<PortfolioSummary.StockDetail> details = stocks.stream()
-                .map(stock -> {
-                    double price = stockPriceService.getPrice(stock.getSymbol());
-                    double totalValue = price * stock.getQuantity();
-                    return PortfolioSummary.StockDetail.builder()
-                            .symbol(stock.getSymbol())
-                            .quantity(stock.getQuantity())
-                            .currentPrice(price)
-                            .totalValue(totalValue)
-                            .build();
-                })
-                .collect(Collectors.toList());
+        List<StockValueResponse> details = stocks.stream()
+                .map(stock -> StockMapper.toValueResponse(stock, stockPriceService.getPrice(stock.getSymbol())))
+                .toList();
 
         int totalQuantity = stocks.stream()
                 .mapToInt(Stock::getQuantity)
                 .sum();
 
         // Calcoliamo totalValue qui per evitare una seconda query al DB se chiamassimo getTotalValue()
-        double totalPortfolioValue = details.stream().mapToDouble(PortfolioSummary.StockDetail::getTotalValue).sum();
+        double totalPortfolioValue = details.stream().mapToDouble(StockValueResponse::getTotalValue).sum();
 
         return PortfolioSummary.builder()
                 .totalValue(totalPortfolioValue)
@@ -84,9 +82,11 @@ public class PortfolioService {
     }
 
     public Stock findHighestValueStock() {
-        List<Stock> stocks = stockRepository.findAll();
-        if (stocks.isEmpty()) return null;
+        return findHighestValueStock(stockRepository.findAll());
+    }
 
+    public Stock findHighestValueStock(List<Stock> stocks) {
+        if (stocks == null || stocks.isEmpty()) return null;
         return stocks.stream()
                 .max((s1, s2) -> {
                     double value1 = stockPriceService.getPrice(s1.getSymbol()) * s1.getQuantity();

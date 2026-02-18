@@ -1,6 +1,7 @@
 package com.example.stock_manager.service;
 
-import com.example.stock_manager.dto.StockRequest;
+import com.example.stock_manager.dto.CreateStockRequest;
+import com.example.stock_manager.dto.UpdateStockRequest;
 import com.example.stock_manager.exception.DuplicateStockException;
 import com.example.stock_manager.exception.InsufficientStockException;
 import com.example.stock_manager.exception.StockNotFoundException;
@@ -24,7 +25,7 @@ public class StockTransactionService {
     // --- CRUD OPERATIONS ---
 
     @Transactional
-    public Stock createStock(StockRequest request) {
+    public Stock createStock(CreateStockRequest request) {
         String symbol = request.getSymbol().toUpperCase();
 
         if (stockRepository.existsById(symbol)) {
@@ -53,7 +54,7 @@ public class StockTransactionService {
     }
 
     @Transactional
-    public Stock updateStock(String symbol, StockRequest request) {
+    public Stock updateStock(String symbol, UpdateStockRequest request) {
         Stock existing = getStockBySymbol(symbol); // Riutilizza la logica di ricerca
         existing.setQuantity(request.getQuantity());
         

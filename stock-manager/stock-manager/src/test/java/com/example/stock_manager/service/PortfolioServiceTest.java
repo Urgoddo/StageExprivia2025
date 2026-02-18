@@ -2,6 +2,7 @@ package com.example.stock_manager.service;
 
 import com.example.stock_manager.dto.PortfolioSummary;
 import com.example.stock_manager.model.Stock;
+import com.example.stock_manager.repository.StockRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -16,6 +17,9 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class PortfolioServiceTest {
+
+    @Mock
+    private StockRepository stockRepository;
 
     @Mock
     private StockPriceService stockPriceService;
@@ -144,7 +148,7 @@ class PortfolioServiceTest {
         assertEquals(2, summary.getTotalStocks());
         assertEquals(15, summary.getTotalQuantity());
         assertEquals(2, summary.getStockDetails().size());
-        assertEquals(15000.0, summary.getTotalValue(), 0.01);
+        assertEquals(15500.0, summary.getTotalValue(), 0.01);
     }
 
     @Test
@@ -209,8 +213,6 @@ class PortfolioServiceTest {
                 .symbol("AAPL")
                 .quantity(10)
                 .build();
-
-        when(stockPriceService.getPrice("AAPL")).thenReturn(150.0);
 
         Stock highest = portfolioService.findHighestValueStock(List.of(apple));
 

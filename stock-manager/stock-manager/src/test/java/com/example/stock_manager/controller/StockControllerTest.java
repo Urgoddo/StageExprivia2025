@@ -1,239 +1,241 @@
 package com.example.stock_manager.controller;
 
+import com.example.stock_manager.dto.CreateStockRequest;
 import com.example.stock_manager.dto.PortfolioSummary;
+import com.example.stock_manager.dto.StockResponse;
+import com.example.stock_manager.dto.StockValueResponse;
 import com.example.stock_manager.dto.TransactionRequest;
+import com.example.stock_manager.dto.UpdateStockRequest;
 import com.example.stock_manager.model.Stock;
-import com.example.stock_manager.repository.StockRepository;
 import com.example.stock_manager.service.PortfolioService;
+import com.example.stock_manager.service.StockPriceService;
 import com.example.stock_manager.service.StockTransactionService;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.MockMvc;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 
 import java.util.List;
-import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.*;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
-@WebMvcTest(StockController.class)
+@ExtendWith(MockitoExtension.class)
 class StockControllerTest {
 
-    @Autowired
-    private MockMvc mockMvc;
-
-    @MockBean
-    private StockRepository repository;
-
-    @MockBean
+    @Mock
     private PortfolioService portfolioService;
 
-    @MockBean
+    @Mock
     private StockTransactionService transactionService;
 
-    @Autowired
-    private ObjectMapper objectMapper;
+    @Mock
+    private StockPriceService stockPriceService;
+
+    @InjectMocks
+    private StockController controller;
 
     @Test
-    void testCreateStock() throws Exception {
-        Stock stock = new Stock("AAPL", 50);
+    void create_returnsCreatedStockResponse() {
+        CreateStockRequest request = CreateStockRequest.builder().symbol("aapl").quantity(50).build();
+        Stock created = Stock.builder().symbol("AAPL").quantity(50).build();
+        when(transactionService.createStock(any(CreateStockRequest.class))).thenReturn(created);
 
-        when(repository.existsById("AAPL")).thenReturn(false);
-        when(repository.save(any(Stock.class))).thenReturn(stock);
+        ResponseEntity<StockResponse> response = controller.create(request);
 
-        mockMvc.perform(post("/api/stocks")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"symbol\": \"AAPL\", \"quantity\": 50}"))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.symbol").value("AAPL"))
-                .andExpect(jsonPath("$.quantity").value(50));
+        assertEquals(HttpStatus.CREATED, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals("AAPL", response.getBody().getSymbol());
+        assertEquals(50, response.getBody().getQuantity());
     }
 
     @Test
-    void testFindAll() throws Exception {
-        when(repository.findAll()).thenReturn(List.of(
+    void findAll_mapsEntitiesToResponses() {
+        when(transactionService.getAllStocks()).thenReturn(List.of(
                 Stock.builder().symbol("AAPL").quantity(10).build(),
                 Stock.builder().symbol("GOOGL").quantity(5).build()
         ));
 
-        mockMvc.perform(get("/api/stocks"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(2));
+        ResponseEntity<List<StockResponse>> response = controller.findAll();
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals(2, response.getBody().size());
+        assertEquals("AAPL", response.getBody().get(0).getSymbol());
     }
 
     @Test
-    void testFindBySymbol() throws Exception {
-        Stock stock = Stock.builder().symbol("AAPL").quantity(10).build();
-        when(repository.findById("AAPL")).thenReturn(Optional.of(stock));
-
-        mockMvc.perform(get("/api/stocks/AAPL"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.symbol").value("AAPL"))
-                .andExpect(jsonPath("$.quantity").value(10));
-    }
-
-    @Test
-    void testUpdateStock() throws Exception {
-        Stock existing = Stock.builder().symbol("AAPL").quantity(10).build();
+    void update_usesPathSymbolAndQuantityOnly() {
+        UpdateStockRequest request = UpdateStockRequest.builder().quantity(20).build();
         Stock updated = Stock.builder().symbol("AAPL").quantity(20).build();
+        when(transactionService.updateStock(eq("AAPL"), any(UpdateStockRequest.class))).thenReturn(updated);
 
-        when(repository.findById("AAPL")).thenReturn(Optional.of(existing));
-        when(repository.save(any(Stock.class))).thenReturn(updated);
+        ResponseEntity<StockResponse> response = controller.update("AAPL", request);
 
-        mockMvc.perform(put("/api/stocks/AAPL")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"symbol\": \"AAPL\", \"quantity\": 20}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.quantity").value(20));
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals("AAPL", response.getBody().getSymbol());
+        assertEquals(20, response.getBody().getQuantity());
     }
 
     @Test
-    void testDeleteStock() throws Exception {
-        when(repository.existsById("AAPL")).thenReturn(true);
-        doNothing().when(repository).deleteById("AAPL");
+    void findBySymbol_mapsEntityToResponse() {
+        Stock stock = Stock.builder().symbol("MSFT").quantity(3).build();
+        when(transactionService.getStockBySymbol("MSFT")).thenReturn(stock);
 
-        mockMvc.perform(delete("/api/stocks/AAPL"))
-                .andExpect(status().isNoContent());
+        ResponseEntity<StockResponse> response = controller.findBySymbol("MSFT");
 
-        verify(repository).deleteById("AAPL");
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals("MSFT", response.getBody().getSymbol());
+        assertEquals(3, response.getBody().getQuantity());
     }
 
     @Test
-    void testGetTotalValue() throws Exception {
-        when(repository.findAll()).thenReturn(List.of());
-        when(portfolioService.getTotalValue(any())).thenReturn(1500.0);
+    void delete_returnsNoContent() {
+        doNothing().when(transactionService).deleteStock("AAPL");
 
-        mockMvc.perform(get("/api/stocks/total-value"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$").value(1500.0));
+        ResponseEntity<Void> response = controller.delete("AAPL");
+
+        assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
+        verify(transactionService).deleteStock("AAPL");
     }
 
     @Test
-    void testGetAveragePrice() throws Exception {
-        when(repository.findAll()).thenReturn(List.of());
-        when(portfolioService.getAveragePricePerShare(any())).thenReturn(200.0);
+    void getTotalValue_delegatesToPortfolioService() {
+        when(portfolioService.getTotalValue()).thenReturn(123.45);
 
-        mockMvc.perform(get("/api/stocks/average-price"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$").value(200.0));
+        ResponseEntity<Double> response = controller.getTotalValue();
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(123.45, response.getBody());
     }
 
     @Test
-    void testGetSummary() throws Exception {
+    void getAveragePricePerShare_delegatesToPortfolioService() {
+        when(portfolioService.getAveragePricePerShare()).thenReturn(10.0);
+
+        ResponseEntity<Double> response = controller.getAveragePricePerShare();
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(10.0, response.getBody());
+    }
+
+    @Test
+    void getSummary_delegatesToPortfolioService() {
         PortfolioSummary summary = PortfolioSummary.builder()
-                .totalValue(1000.0)
-                .averagePricePerShare(150.0)
-                .totalStocks(2)
-                .totalQuantity(10)
+                .totalValue(1.0)
+                .averagePricePerShare(2.0)
+                .totalStocks(1)
+                .totalQuantity(3)
                 .stockDetails(List.of())
                 .build();
+        when(portfolioService.getPortfolioSummary()).thenReturn(summary);
 
-        when(repository.findAll()).thenReturn(List.of());
-        when(portfolioService.getPortfolioSummary(any())).thenReturn(summary);
+        ResponseEntity<PortfolioSummary> response = controller.getSummary();
 
-        mockMvc.perform(get("/api/stocks/summary"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalValue").value(1000.0))
-                .andExpect(jsonPath("$.totalStocks").value(2));
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals(1, response.getBody().getTotalStocks());
     }
 
     @Test
-    void testGetHighestValueStock() throws Exception {
-        Stock highest = Stock.builder().symbol("GOOGL").quantity(1).build();
+    void buyStock_returnsMappedResponse() {
+        TransactionRequest request = TransactionRequest.builder().symbol("AAPL").quantity(10).build();
+        when(transactionService.buyStock("AAPL", 10)).thenReturn(Stock.builder().symbol("AAPL").quantity(10).build());
 
-        when(repository.findAll()).thenReturn(List.of());
-        when(portfolioService.findHighestValueStock(any())).thenReturn(highest);
+        ResponseEntity<StockResponse> response = controller.buyStock(request);
 
-        mockMvc.perform(get("/api/stocks/highest-value"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.symbol").value("GOOGL"));
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals("AAPL", response.getBody().getSymbol());
+        assertEquals(10, response.getBody().getQuantity());
     }
 
     @Test
-    void testGetHighestValueStock_notFound() throws Exception {
-        when(repository.findAll()).thenReturn(List.of());
-        when(portfolioService.findHighestValueStock(any())).thenReturn(null);
+    void sell_returnsMappedResponseWhenNotAllSharesSold() {
+        TransactionRequest request = TransactionRequest.builder().symbol("AAPL").quantity(5).build();
+        when(transactionService.sellStock("AAPL", 5)).thenReturn(Stock.builder().symbol("AAPL").quantity(5).build());
 
-        mockMvc.perform(get("/api/stocks/highest-value"))
-                .andExpect(status().isNotFound());
+        ResponseEntity<StockResponse> response = controller.sellStock(request);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals(5, response.getBody().getQuantity());
     }
 
     @Test
-    void testBuyStock() throws Exception {
-        Stock stock = Stock.builder().symbol("AAPL").quantity(10).build();
-        TransactionRequest request = TransactionRequest.builder()
-                .symbol("AAPL")
-                .quantity(10)
-                .build();
+    void getHighestValueStock_returnsValueDto() {
+        Stock highest = Stock.builder().symbol("GOOGL").quantity(2).build();
+        when(portfolioService.findHighestValueStock()).thenReturn(highest);
+        when(stockPriceService.getPrice("GOOGL")).thenReturn(100.0);
 
-        when(transactionService.buyStock("AAPL", 10)).thenReturn(stock);
+        ResponseEntity<StockValueResponse> response = controller.getHighestValueStock();
 
-        mockMvc.perform(post("/api/stocks/buy")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.symbol").value("AAPL"));
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals("GOOGL", response.getBody().getSymbol());
+        assertEquals(2, response.getBody().getQuantity());
+        assertEquals(100.0, response.getBody().getCurrentPrice(), 0.0001);
+        assertEquals(200.0, response.getBody().getTotalValue(), 0.0001);
     }
 
     @Test
-    void testSellStock() throws Exception {
-        Stock stock = Stock.builder().symbol("AAPL").quantity(5).build();
-        TransactionRequest request = TransactionRequest.builder()
-                .symbol("AAPL")
-                .quantity(5)
-                .build();
+    void getHighestValueStock_returns404WhenNull() {
+        when(portfolioService.findHighestValueStock()).thenReturn(null);
 
-        when(transactionService.sellStock("AAPL", 5)).thenReturn(stock);
+        ResponseEntity<StockValueResponse> response = controller.getHighestValueStock();
 
-        mockMvc.perform(post("/api/stocks/sell")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.quantity").value(5));
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+        assertNull(response.getBody());
     }
 
     @Test
-    void testSellStock_allShares() throws Exception {
-        TransactionRequest request = TransactionRequest.builder()
-                .symbol("AAPL")
-                .quantity(10)
-                .build();
-
+    void sell_returnsNoContentWhenServiceReturnsNull() {
+        TransactionRequest request = TransactionRequest.builder().symbol("AAPL").quantity(10).build();
         when(transactionService.sellStock("AAPL", 10)).thenReturn(null);
 
-        mockMvc.perform(post("/api/stocks/sell")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isNoContent());
+        ResponseEntity<StockResponse> response = controller.sellStock(request);
+
+        assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
+        assertNull(response.getBody());
     }
 
     @Test
-    void testGetStocksSortedByValue() throws Exception {
-        List<Stock> stocks = List.of(
-                Stock.builder().symbol("GOOGL").quantity(1).build(),
-                Stock.builder().symbol("AAPL").quantity(10).build()
-        );
+    void getStocksSortedByValue_sortsUsingComputedTotalValue() {
+        when(transactionService.getAllStocks()).thenReturn(List.of(
+                Stock.builder().symbol("AAPL").quantity(10).build(),   // price 10 -> total 100
+                Stock.builder().symbol("GOOGL").quantity(1).build()   // price 1000 -> total 1000
+        ));
+        when(stockPriceService.getPrice("AAPL")).thenReturn(10.0);
+        when(stockPriceService.getPrice("GOOGL")).thenReturn(1000.0);
 
-        when(transactionService.getStocksByValue()).thenReturn(stocks);
+        ResponseEntity<List<StockValueResponse>> response = controller.getStocksSortedByValue();
 
-        mockMvc.perform(get("/api/stocks/sorted-by-value"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(2));
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals(2, response.getBody().size());
+        assertEquals("GOOGL", response.getBody().get(0).getSymbol());
+        assertEquals("AAPL", response.getBody().get(1).getSymbol());
     }
 
     @Test
-    void testGetTotalInvestment() throws Exception {
-        when(transactionService.calculateTotalInvestment("AAPL")).thenReturn(1500.0);
+    void getTotalInvestment_delegatesToTransactionService() {
+        when(transactionService.calculateTotalInvestment("AAPL")).thenReturn(999.0);
 
-        mockMvc.perform(get("/api/stocks/AAPL/investment"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$").value(1500.0));
+        ResponseEntity<Double> response = controller.getTotalInvestment("AAPL");
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(999.0, response.getBody());
     }
 }
+

@@ -1,5 +1,8 @@
 package com.example.stock_manager.service;
 
+import com.example.stock_manager.dto.CreateStockRequest;
+import com.example.stock_manager.dto.UpdateStockRequest;
+import com.example.stock_manager.exception.DuplicateStockException;
 import com.example.stock_manager.exception.InsufficientStockException;
 import com.example.stock_manager.exception.StockNotFoundException;
 import com.example.stock_manager.model.Stock;
@@ -16,6 +19,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
@@ -30,6 +34,86 @@ class StockTransactionServiceTest {
 
     @InjectMocks
     private StockTransactionService transactionService;
+
+    @Test
+    void testCreateStock_uppercasesSymbolAndSaves() {
+        CreateStockRequest request = CreateStockRequest.builder()
+                .symbol("aapl")
+                .quantity(10)
+                .build();
+
+        when(stockRepository.existsById("AAPL")).thenReturn(false);
+        when(stockRepository.save(any(Stock.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Stock created = transactionService.createStock(request);
+
+        assertNotNull(created);
+        assertEquals("AAPL", created.getSymbol());
+        assertEquals(10, created.getQuantity());
+    }
+
+    @Test
+    void testCreateStock_throwsOnDuplicate() {
+        CreateStockRequest request = CreateStockRequest.builder()
+                .symbol("AAPL")
+                .quantity(10)
+                .build();
+
+        when(stockRepository.existsById("AAPL")).thenReturn(true);
+
+        assertThrows(DuplicateStockException.class, () -> transactionService.createStock(request));
+    }
+
+    @Test
+    void testGetAllStocks_delegatesToRepository() {
+        when(stockRepository.findAll()).thenReturn(List.of(Stock.builder().symbol("AAPL").quantity(1).build()));
+
+        List<Stock> stocks = transactionService.getAllStocks();
+
+        assertEquals(1, stocks.size());
+        verify(stockRepository).findAll();
+    }
+
+    @Test
+    void testGetStockBySymbol_uppercasesAndReturns() {
+        when(stockRepository.findById("AAPL")).thenReturn(Optional.of(Stock.builder().symbol("AAPL").quantity(1).build()));
+
+        Stock stock = transactionService.getStockBySymbol("aapl");
+
+        assertEquals("AAPL", stock.getSymbol());
+    }
+
+    @Test
+    void testGetStockBySymbol_throwsWhenMissing() {
+        when(stockRepository.findById("AAPL")).thenReturn(Optional.empty());
+        assertThrows(StockNotFoundException.class, () -> transactionService.getStockBySymbol("AAPL"));
+    }
+
+    @Test
+    void testUpdateStock_updatesQuantity() {
+        when(stockRepository.findById("AAPL")).thenReturn(Optional.of(Stock.builder().symbol("AAPL").quantity(1).build()));
+        when(stockRepository.save(any(Stock.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        UpdateStockRequest request = UpdateStockRequest.builder().quantity(99).build();
+        Stock updated = transactionService.updateStock("AAPL", request);
+
+        assertEquals(99, updated.getQuantity());
+    }
+
+    @Test
+    void testDeleteStock_deletesWhenExists() {
+        when(stockRepository.existsById("AAPL")).thenReturn(true);
+
+        transactionService.deleteStock("aapl");
+
+        verify(stockRepository).deleteById("AAPL");
+    }
+
+    @Test
+    void testDeleteStock_throwsWhenMissing() {
+        when(stockRepository.existsById("AAPL")).thenReturn(false);
+        assertThrows(StockNotFoundException.class, () -> transactionService.deleteStock("AAPL"));
+    }
 
     @Test
     void testBuyStock_newStock() {
@@ -115,7 +199,6 @@ class StockTransactionServiceTest {
                 .build();
 
         when(stockRepository.findById(symbol)).thenReturn(Optional.of(existing));
-        when(stockPriceService.getPrice(symbol)).thenReturn(150.0);
 
         Stock result = transactionService.sellStock(symbol, quantity);
 

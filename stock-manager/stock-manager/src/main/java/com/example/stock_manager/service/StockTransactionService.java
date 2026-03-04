@@ -55,7 +55,7 @@ public class StockTransactionService {
 
     @Transactional
     public Stock updateStock(String symbol, UpdateStockRequest request) {
-        Stock existing = getStockBySymbol(symbol); // Riutilizza la logica di ricerca
+GAl        Stock existing = getStockBySymbol(symbol); // Riutilizza la logica di ricerca
         existing.setQuantity(request.getQuantity());
         
         Stock updated = stockRepository.save(existing);
